@@ -1,15 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
-	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="41cc78f9-875e-4d79-9ed5-958250bd5a4d" >
-		<http:listener-connection host="0.0.0.0" port="8081" />
-	</http:listener-config>
-	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="73a627ea-6a8f-43e5-8c29-a2ceef710a74" >
-		<http:request-connection host="localhost" port="8081" />
-	</http:request-config>
+<mule xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd">
+	
 	<flow name="helloFlow" doc:id="4adcd204-1a32-4265-8ecc-7b2e6647458e" >
 		<http:listener doc:name="GET/hello" doc:id="80f77daf-60b0-4cfc-ae4f-1371a31a53b3" config-ref="HTTP_Listener_config" path="/hello" allowedMethods="GET">
 			<http:response reasonPhrase="Success" >
@@ -20,19 +16,25 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 }]]]></http:headers>
 			</http:response>
 		</http:listener>
-		<set-variable value="#[message.attributes.queryParams.fname]" doc:name="firstname" doc:id="39e739eb-612e-43e7-825a-250e45e9d34f" variableName="firstName"/>
-		<set-payload value="hello" doc:name="Hello" doc:id="7fa6c3a6-732f-4ca3-8f50-31bdd0bc870c" />
+		<flow-ref doc:name="subFlow" doc:id="ce9401e2-7977-4c37-bae1-ffddaab49c9f" name="subFlow"/>
+		<vm:publish doc:name="VM goodbye" doc:id="3b95ea17-30f0-4809-8ca7-40cf3decbe85" config-ref="VM_Config" queueName="goodbye"/>
+		<logger level="INFO" doc:name="payload" doc:id="ac9f811f-2cd8-42ed-991e-2698aef66bdb" message="#['\nMessage:' ++ payload]"/>
+	</flow>
+	<flow name="privateFlow" doc:id="a6e43557-56f6-4e2e-a628-3670fc6aa8a5">
 		<http:request method="GET" doc:name="GET/goodbye" doc:id="43f0990a-6f93-4d17-b4da-23cc4329faf9" config-ref="HTTP_Request_configuration" path="/goodbye" responseTimeout="300000">
-			<http:query-params ><![CDATA[#[output application/java
+			<http:query-params><![CDATA[#[output application/java
 ---
 {
 	"fullname" : attributes.queryParams.fname
 }]]]></http:query-params>
 		</http:request>
-		<logger level="INFO" doc:name="payload" doc:id="ac9f811f-2cd8-42ed-991e-2698aef66bdb" message="#['\nMessage:' ++ payload]"/>
 	</flow>
+	<sub-flow name="subFlow" doc:id="24d15245-5729-4a76-951b-50a341ec0439" >
+		<set-variable value="#[message.attributes.queryParams.fname]" doc:name="firstname" doc:id="39e739eb-612e-43e7-825a-250e45e9d34f" variableName="firstName" />
+		<set-payload value="hello" doc:name="Hello" doc:id="7fa6c3a6-732f-4ca3-8f50-31bdd0bc870c" />
+	</sub-flow>
 	<flow name="goodbyeFlow" doc:id="def0f6ff-43ee-4837-bbc0-261f5e88e6b8" >
-		<http:listener doc:name="GET/goodbye" doc:id="3c22b9e5-4f53-4bb8-9808-0eb084af388d" config-ref="HTTP_Listener_config" path="/goodbye" allowedMethods="GET"/>
+		<vm:listener queueName="goodbye" doc:name="VM goodbye" doc:id="5d670777-630a-4f12-907d-3f530ce81f5c" config-ref="VM_Config"/>
 		<set-payload value="#[upper('Goodbye') ++ ' ' ++ (attributes.queryParams.fullname default 'Maxine')]" doc:name="Goodbye" doc:id="5594a152-0c54-4434-a868-04fafe6ad850" />
 		<logger level="INFO" doc:name="fullName" doc:id="4f2731ef-ff73-4f58-a72e-18f47744ab5b" message="#[attributes.queryParams.fullname]"/>
 	</flow>
