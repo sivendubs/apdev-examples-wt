@@ -4,5 +4,16 @@ http:
 sfdc:
   username: "sivendu@njclabs.com"
   password: "Salesforce@903"
-  token:  "1HulcRvHO5O7bZIwIDkxUo2v"  
+  token:  "1HulcRvHO5O7bZIwIDkxUo2v" 
+  
+file:
+  accountsDir: "/Users/vishnuprasad/Downloads/MUFundamentals4.3_studentFiles_12may2020/resources"    
+  
+db:
+  host: "mudb.learn.mulesoft.com"
+  port: "3306"
+  user: "mule"
+  password: "mule"
+  database: "training"
+  
   

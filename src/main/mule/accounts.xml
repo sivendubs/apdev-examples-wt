@@ -1,11 +1,83 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-	xmlns:http="http://www.mulesoft.org/schema/mule/http"
-	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+	<flow name="syncDBaccountsWithPostal" doc:id="e42f1dae-14c1-4fe2-ad4c-9071d1bc733b" >
+		<scheduler doc:name="Scheduler" doc:id="b3418fea-499d-43a9-a1f0-523d8451625e" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="10" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<os:retrieve doc:name="lastaccountID" doc:id="760ce3f9-9325-47da-80da-9388bd411029" key="lastaccountID" target="lastaccountID">
+			<os:default-value ><![CDATA[0]]></os:default-value>
+		</os:retrieve>
+		<db:select doc:name="accounts" doc:id="3e63eb1e-9a63-490f-943b-6c7bfc90192c" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT * FROM accounts WHERE postal=:postal and accountID > :lastaccountID]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{postal: '94105', lastaccountID: vars.lastaccountID}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="f99bff41-4aa6-435a-b60c-2fb915ee9beb" >
+			<when expression="#[not isEmpty(payload)]">
+				<os:store doc:name="lastaccountID" doc:id="bb6d5fa9-972b-4def-8511-585e0059f250" key="lastaccountID">
+			<os:value><![CDATA[#[max(payload.*accountID)]]]></os:value>
+		</os:store>
+				<file:write doc:name="DBaccountsPostal.csv" doc:id="3dbaa027-ea85-464c-9487-f5116a45ce00" config-ref="File_Config" path="output/DBaccountsPostal.csv" mode="APPEND">
+			<file:content><![CDATA[#[output application/csv header=false  --- payload]]]></file:content>
+		</file:write>
+				<jms:publish doc:name="JMS accountsQ" doc:id="c2973316-e76e-4408-b82c-8c6c21ef810b" config-ref="JMS_Config" destination="accountsQ">
+					<jms:message >
+						<jms:body ><![CDATA[#[output application/json --- payload]]]></jms:body>
+						<jms:properties ><![CDATA[#[{publisher:"training"}]]]></jms:properties>
+					</jms:message>
+				</jms:publish>
+				<logger level="INFO" doc:name="CSV payload" doc:id="b8a4755e-10ad-4edd-be00-c5e3936f8b67" message="#[output application/csv --- payload]" />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="No new records" doc:id="311e25c7-a736-4788-960d-473eddbd0640" message="No new records"/>
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="receiveJMSMessages" doc:id="8e1d4844-e38f-46f5-b3e8-258d8a4caa88" >
+		<jms:listener doc:name="JMS activeQ" doc:id="ca9c7197-7f7a-4d24-a095-458a4cb09c10" config-ref="JMS_Config" destination="accountsQ">
+			<jms:consumer-type >
+				<jms:queue-consumer />
+			</jms:consumer-type>
+		</jms:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="a8be7ba8-f5a3-4949-8de3-70d6409e5239" />
+	</flow>
+	<flow name="getCSVAccounts" doc:id="bf86e039-ed0c-4aef-93d4-73c9f690d150" >
+		<file:listener doc:name="accounts.csv" doc:id="62c4ac8a-e338-4d6d-a224-341d9f5c420d" config-ref="File_Config" directory="input" moveToDirectory="output" renameTo='#[attributes.fileName ++ ".backup"]'>
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+			<file:matcher filenamePattern="*.csv" />
+		</file:listener>
+		<logger level="INFO" doc:name="payload" doc:id="787ded3e-378d-4d68-a3ce-156e490f7261" message="#[payload]"/>
+	</flow>
+	<flow name="syncDBaccountstoCSV" doc:id="35768fb9-38e0-43ba-a9b9-1661f727c373" initialState="stopped">
+		<db:listener doc:name="accounts" doc:id="6e8d18e6-3c05-419e-96b0-4aea414b1c04" config-ref="Database_Config" table="accounts" watermarkColumn="accountID" idColumn="accountID">
+			<scheduling-strategy >
+				<fixed-frequency frequency="10" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</db:listener>
+		<ee:transform doc:name="java to CSV" doc:id="c9cec80d-5a7a-4032-b37f-3c9eea5bf20c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/csv header=false
+---
+[payload]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<file:write doc:name="accounts.csv" doc:id="45cf3526-467f-4b10-a5d0-754d3cb67291" config-ref="File_Config" path="output/DBaccounts.csv" mode="APPEND"/>
+		<logger level="INFO" doc:name="Logger" doc:id="fdbab24b-940e-4439-b6ff-70b588c96246" message="#[payload]"/>
+	</flow>
 	<flow name="getSFDCaccounts" doc:id="82d859a9-1811-4901-ad3a-868521ee4d94" >
 		<http:listener doc:name="GET/sfdc" doc:id="de345224-3d8c-441f-aa34-91c460c090d0" config-ref="HTTP_Listener_config" path="/sfdc" allowedMethods="GET"/>
 		<salesforce:query doc:name="Account" doc:id="7bf0187c-dfa5-4de2-9ae4-65dcdc58742c" config-ref="Salesforce_Config">
